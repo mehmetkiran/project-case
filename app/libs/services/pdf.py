@@ -19,6 +19,7 @@ class PDFService:
     Service class for handling PDF-related business logic.
     This includes uploading, listing, parsing, and selecting PDFs.
     """
+
     def __init__(self, db: Database, fs: GridFS):
         """
         Initializes the PDFService.
@@ -121,7 +122,7 @@ class PDFService:
             PDFNotFoundException: If the PDF is not found for the given user.
         """
         try:
-            ObjectId(pdf_id_str) # Validate ID format
+            ObjectId(pdf_id_str)  # Validate ID format
         except Exception:
             raise InvalidPDFFormatException(f"Invalid PDF ID format: {pdf_id_str}")
 
@@ -177,25 +178,9 @@ class PDFService:
             NoTextExtractedException: If no text is found in the PDF.
             DatabaseOperationException: If saving parsed text fails.
         """
-        self._get_pdf_metadata_and_validate_user(pdf_id_str, user_id) # Validates existence and ownership
-        pdf_bytes = self._get_pdf_bytes_from_gridfs(pdf_id_str)
+        self._get_pdf_metadata_and_validate_user(pdf_id_str, user_id)  # Validates existence and ownership
 
-        pdf_stream = io.BytesIO(pdf_bytes)
-        try:
-            reader = PdfReader(pdf_stream)
-            if not reader.pages:
-                 raise InvalidPDFFormatException("PDF file does not contain any pages.")
-        except Exception as e:
-            raise PDFParsingException(f"Could not initialize PDF reader or file is unreadable (ID: {pdf_id_str}): {e}")
-
-        full_text = ""
-        for i, page in enumerate(reader.pages):
-            try:
-                text = page.extract_text()
-                if text:
-                    full_text += text + "\n"
-            except Exception as e:
-                raise PDFParsingException(f"Error parsing page {i+1} of PDF (ID: {pdf_id_str}): {e}")
+        full_text = self.get_full_text(pdf_id_str, user_id)
 
         if not full_text.strip():
             raise NoTextExtractedException(f"No text could be extracted from PDF (ID: {pdf_id_str}).")
@@ -206,7 +191,7 @@ class PDFService:
                 {"$set": {
                     "text_content": full_text,
                     "last_parsed_at": datetime.now(timezone.utc)
-                    }
+                }
                 },
                 upsert=True
             )
@@ -234,11 +219,42 @@ class PDFService:
                 {"user_id": user_id},
                 {"$set": {
                     "selected_pdf_id": pdf_id_str,
-                    "selected_filename": pdf_doc.get("filename"), # Store filename for convenience
+                    "selected_filename": pdf_doc.get("filename"),  # Store filename for convenience
                     "selection_date": datetime.now(timezone.utc)
-                    }
+                }
                 },
                 upsert=True
             )
         except Exception as e:
             raise DatabaseOperationException(f"Error saving PDF selection for user {user_id}, PDF ID {pdf_id_str}: {e}")
+
+    def get_full_text(self, pdf_id_str, user_id):
+        pdf_doc = self.metadata_collection.find_one({
+            "user_id": user_id,
+            "gridfs_id": pdf_id_str
+        })
+        if not pdf_doc:
+            raise PDFNotFoundException(
+                f"PDF with ID '{pdf_id_str}' not found for user {user_id} or unauthorized access."
+            )
+
+        pdf_bytes = self._get_pdf_bytes_from_gridfs(pdf_id_str)
+
+        pdf_stream = io.BytesIO(pdf_bytes)
+        try:
+            reader = PdfReader(pdf_stream)
+            if not reader.pages:
+                raise InvalidPDFFormatException("PDF file does not contain any pages.")
+        except Exception as e:
+            raise PDFParsingException(f"Could not initialize PDF reader or file is unreadable (ID: {pdf_id_str}): {e}")
+
+        full_text = ""
+        for i, page in enumerate(reader.pages):
+            try:
+                text = page.extract_text()
+                if text:
+                    full_text += text + "\n"
+            except Exception as e:
+                raise PDFParsingException(f"Error parsing page {i + 1} of PDF (ID: {pdf_id_str}): {e}")
+
+        return full_text
