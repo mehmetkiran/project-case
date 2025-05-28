@@ -1,6 +1,6 @@
 import io
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from PyPDF2 import PdfReader
 from bson import ObjectId
@@ -220,7 +220,8 @@ class PDFService:
                 {"$set": {
                     "selected_pdf_id": pdf_id_str,
                     "selected_filename": pdf_doc.get("filename"),  # Store filename for convenience
-                    "selection_date": datetime.now(timezone.utc)
+                    "selection_date": datetime.now(timezone.utc),
+                    "full_text": self.get_full_text(pdf_id_str, user_id)
                 }
                 },
                 upsert=True
@@ -258,3 +259,31 @@ class PDFService:
                 raise PDFParsingException(f"Error parsing page {i + 1} of PDF (ID: {pdf_id_str}): {e}")
 
         return full_text
+
+    def get_selected_pdf_for_user(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Returns the selected PDF metadata for a given user from the user_pdf_selection collection.
+
+        Args:
+            user_id: The ID of the user.
+
+        Returns:
+            A dictionary containing selected PDF info such as 'selected_pdf_id', 'selected_filename', and 'selection_date',
+            or None if the user has no selected PDF.
+
+        Raises:
+            DatabaseOperationException: If there's an error querying the database.
+        """
+        try:
+            selection = self.user_pdf_selection_collection.find_one(
+                {"user_id": user_id, "selected_pdf_id": {"$ne": None}})
+            if not selection:
+                return None
+
+            # Convert selection_date to ISO format string for consistency (optional)
+            if "selection_date" in selection and isinstance(selection["selection_date"], datetime):
+                selection["selection_date"] = selection["selection_date"].isoformat()
+
+            return selection
+        except Exception as e:
+            raise DatabaseOperationException(f"Error retrieving selected PDF for user {user_id}: {e}")
