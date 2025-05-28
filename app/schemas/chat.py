@@ -17,3 +17,14 @@ class ChatHistoryBase(BaseModel):
 
     class Config:
         orm_mode = True
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+class ChatResponse(BaseModel):
+    id: int
+    message: str
+    direction: MessageDirection
+    created_at: datetime
+    pdf_hash: Optional[str] = None
