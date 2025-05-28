@@ -125,6 +125,7 @@ steps:
 
 You can access and import the Postman collection from the following path:
 ```.postman/Project-Case.postman_collection.json```
+Additionally, you can find example `curl` requests in the same directory:
 
 ## Known issues
 
