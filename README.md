@@ -54,7 +54,7 @@ project-case/
 1. **Clone the repository**
 
 ```shell script
-git clone 
+git clone https://github.com/mehmetkiran/project-case
    cd project-case
 ```
 
